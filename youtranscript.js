@@ -11,6 +11,8 @@
 (function() {
     'use strict';
 
+    let fullscreenChangeHandler = null; // 用于存储全屏事件处理函数
+
     /**
      * 创建并添加复制字幕按钮到页面
      */
@@ -62,6 +64,12 @@
         // 点击事件
         btn.addEventListener('click', handleCopyTranscriptClick);
 
+        // 根据初始全屏状态设置按钮可见性
+        if (document.fullscreenElement) {
+            btn.style.display = 'none';
+        }
+
+
         document.body.appendChild(btn);
 
         // 创建提示框
@@ -99,6 +107,20 @@
             @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         `;
         document.head.appendChild(style);
+
+        // 定义并添加全屏状态改变监听器
+        fullscreenChangeHandler = () => {
+            const button = document.getElementById('copy-transcript-btn');
+            if (button) {
+                if (document.fullscreenElement) {
+                    button.style.display = 'none'; // 全屏时隐藏
+                } else {
+                    button.style.display = 'flex'; // 退出全屏时显示
+                }
+            }
+        };
+        document.addEventListener('fullscreenchange', fullscreenChangeHandler);
+
     }
 
     /**
@@ -284,6 +306,11 @@
             const existingStyle = document.getElementById('youtrascript-style');
             if (existingStyle) {
                 existingStyle.remove();
+            }
+            // 移除全屏事件监听器
+            if (fullscreenChangeHandler) {
+                document.removeEventListener('fullscreenchange', fullscreenChangeHandler);
+                fullscreenChangeHandler = null;
             }
         }
     }
