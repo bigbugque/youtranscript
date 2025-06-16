@@ -12,6 +12,7 @@
     'use strict';
 
     let fullscreenChangeHandler = null; // 用于存储全屏事件处理函数
+    let buttonHidden = false; // 记录按钮是否被手动隐藏
 
     /**
      * 创建并添加复制字幕按钮到页面
@@ -22,8 +23,11 @@
             return;
         }
 
+        // 创建主按钮
         const btn = document.createElement('button');
         btn.id = 'copy-transcript-btn';
+
+        // 剪贴板图标
         btn.textContent = '📋'; // 剪贴板图标
         btn.title = '复制视频字幕 (Ctrl+Shift+C)'; // 鼠标悬停提示
         Object.assign(btn.style, {
@@ -49,6 +53,58 @@
             lineHeight: '1',
         });
 
+        // 创建关闭按钮
+        const closeBtn = document.createElement('span');
+        closeBtn.textContent = '×';
+        Object.assign(closeBtn.style, {
+            position: 'absolute',
+            top: '0',
+            right: '0',
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            background: 'rgba(0, 0, 0, 0.5)',
+            color: 'white',
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'none', // 初始隐藏
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: '1',
+        });
+        btn.appendChild(closeBtn);
+
+        // 鼠标悬停在主按钮上时显示关闭按钮
+        btn.addEventListener('mouseover', () => {
+            closeBtn.style.display = 'flex';
+            btn.style.background = '#0056b3'; // 深蓝色
+            btn.style.transform = 'scale(1.1) rotate(5deg)';
+            btn.style.opacity = '1';
+        });
+
+        // 鼠标移出主按钮时隐藏关闭按钮（如果未点击关闭）
+        btn.addEventListener('mouseout', (event) => {
+            // 计算鼠标位置与按钮的距离
+            const rect = btn.getBoundingClientRect();
+            const distanceX = Math.max(rect.left - event.clientX, event.clientX - rect.right);
+            const distanceY = Math.max(rect.top - event.clientY, event.clientY - rect.bottom);
+            const distance = Math.max(distanceX, distanceY);
+
+            if (distance > 5) {
+                closeBtn.style.display = 'none';
+                btn.style.background = '#007bff';
+                btn.style.transform = 'scale(1) rotate(0deg)';
+                btn.style.opacity = '0.9';
+            }
+        });
+
+        // 点击关闭按钮时隐藏整个按钮
+        closeBtn.addEventListener('click', (event) => {
+            event.stopPropagation(); // 阻止事件冒泡到主按钮
+            btn.style.display = 'none';
+            buttonHidden = true; // 设置隐藏标志
+        });
+
         // 鼠标悬停效果
         btn.addEventListener('mouseover', () => {
             btn.style.background = '#0056b3'; // 深蓝色
@@ -63,6 +119,11 @@
 
         // 点击事件
         btn.addEventListener('click', handleCopyTranscriptClick);
+
+        // 根据隐藏状态设置按钮可见性
+        if (buttonHidden) {
+            btn.style.display = 'none';
+        }
 
         // 根据初始全屏状态设置按钮可见性
         if (document.fullscreenElement) {
@@ -93,10 +154,18 @@
         document.body.appendChild(toast);
 
         // 添加键盘快捷键 Ctrl+Shift+C
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
-                e.preventDefault(); // 阻止浏览器默认行为
-                handleCopyTranscriptClick();
+        document.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
+                event.preventDefault(); // 阻止默认行为
+
+                // 如果按钮被隐藏，则显示按钮 (非全屏时)
+                if (buttonHidden && !document.fullscreenElement) {
+                    btn.style.display = 'flex';
+                    buttonHidden = false;
+                } else {
+                    // 否则，正常处理复制逻辑
+                    handleCopyTranscriptClick();
+                }
             }
         });
 
@@ -251,6 +320,11 @@
      */
     async function handleCopyTranscriptClick() {
         const btn = document.getElementById('copy-transcript-btn');
+        if (buttonHidden) {
+            showToast('按钮已隐藏，请按 Ctrl+Shift+C 恢复。');
+            return;
+        }
+
         if (btn.classList.contains('loading')) {
             return; // 避免重复点击
         }
