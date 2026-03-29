@@ -246,29 +246,34 @@
             console.warn("尝试打开字幕菜单时发生错误:", e);
         }
 
+        // 兼容新版和旧版 YouTube DOM 的字幕选择器
+        const transcriptSegmentSelector = 'transcript-segment-view-model .yt-core-attributed-string, yt-formatted-string.ytd-transcript-segment-renderer';
+
         if (!transcriptOpened) {
-            throw new Error('未能找到"显示字幕"按钮。此视频可能没有字幕。');
+            // 如果自动点击失败，检查页面上是否已经存在字幕（可能用户手动打开了）
+            const existingSegments = document.querySelector(transcriptSegmentSelector);
+            if (!existingSegments) {
+                throw new Error('未能找到"显示字幕"按钮。此视频可能没有字幕。');
+            }
         }
 
-        const transcriptPanelSelector = 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"]';
-        const transcriptSegmentSelector = 'yt-formatted-string.ytd-transcript-segment-renderer';
+        // 使用 MutationObserver 等待字幕内容直接加载
+        console.log("等待字幕内容加载...");
+        const firstSegment = await waitForElement(transcriptSegmentSelector, 20000);
+        if (!firstSegment) {
+            throw new Error('字幕面板已加载，但没有找到字幕内容，可能是网络问题或页面结构变化。');
+        }
 
-        // 使用 MutationObserver 等待字幕面板加载
-        const transcriptPanel = await waitForElement(transcriptPanelSelector, 20000);
-        if (!transcriptPanel) {
-            throw new Error('字幕面板未能加载，可能是网络问题或页面结构变化。');
-        }
-        if (!transcriptPanel.querySelector(transcriptSegmentSelector)) {
-            throw new Error('字幕面板已加载，但没有找到字幕内容，可能是视频没有字幕或字幕未加载完成。');
-        }
+        // 向上层查找到当前的字幕面板容器
+        const transcriptPanel = firstSegment.closest('ytd-engagement-panel-section-list-renderer') || document;
 
         // 提取字幕文本，使用`\n`分隔每个字幕段
         console.log("字幕面板已加载，开始提取字幕文本...");
         const segments = transcriptPanel.querySelectorAll(transcriptSegmentSelector);
-        const transcriptText = Array.from(segments).map(s => s.textContent.trim()).join('\n');
+        const transcriptText = Array.from(segments).map(s => s.textContent.trim()).filter(Boolean).join('\n');
 
         // 提取完后关闭字幕面板，尝试多种语言
-        const closeButton = Array.from(document.querySelectorAll(`${transcriptPanelSelector} button[aria-label]`)).find(btn => 
+        const closeButton = Array.from(transcriptPanel.querySelectorAll('button[aria-label]')).find(btn => 
             btn.getAttribute('aria-label').toLowerCase().includes('close') || 
             btn.getAttribute('aria-label').includes('关闭')
         );
