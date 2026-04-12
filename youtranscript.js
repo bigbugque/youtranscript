@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube 一键提取字幕 (优化修复版)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  帮助中文用户一键复制YouTube视频字幕到剪贴板，采用内置API提取，极速静默，不干扰观看。
+// @version      2.2
+// @description  帮助中文用户一键复制YouTube视频字幕到剪贴板，采用内置API提取，极速静默。适配了最新的YouTube DOM结构。
 // @author       yhelo (Optimized)
 // @match        *://www.youtube.com/*
 // @noframes
@@ -50,7 +50,6 @@
         const container = document.getElementById('youtranscript-container');
         if (!container) return;
 
-        // 使用 href.includes 替代 pathname，兼容性更好
         const isWatchPage = window.location.href.includes('/watch');
         if (!isWatchPage || buttonHidden || document.fullscreenElement) {
             container.style.display = 'none';
@@ -87,12 +86,17 @@
      * 方案 A: 通过 YouTube 内部 API 后台静默获取
      */
     async function getYouTubeTranscriptAPI() {
+        let response = null;
         const player = document.getElementById('movie_player');
-        if (!player || typeof player.getPlayerResponse !== 'function') {
-            throw new Error('未找到播放器实例');
+        
+        if (player && typeof player.getPlayerResponse === 'function') {
+            response = player.getPlayerResponse();
+        }
+        // 如果播放器API未就绪，尝试从全局变量兜底
+        if (!response && window.ytInitialPlayerResponse) {
+            response = window.ytInitialPlayerResponse;
         }
 
-        const response = player.getPlayerResponse();
         const captionTracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
         if (!captionTracks || !captionTracks.length) {
@@ -125,6 +129,7 @@
 
     /**
      * 方案 B: 原有的 DOM 模拟点击提取方案 (做 fallback 备用)
+     * 已适配 YouTube 最新结构变更 (2024.4)
      */
     async function getYouTubeTranscriptDOM() {
         const expandBtn = document.querySelector('tp-yt-paper-button#expand');
@@ -133,18 +138,22 @@
             await new Promise(r => setTimeout(r, 600));
         }
 
-        const transcriptBtn = Array.from(document.querySelectorAll('button[aria-label]'))
+        // 寻找字幕开关按钮
+        const transcriptBtn = Array.from(document.querySelectorAll('button'))
             .find(btn => {
-                const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-                return label.includes('transcript') || label.includes('字幕');
+                const label = (btn.getAttribute('aria-label') || btn.textContent || '').toLowerCase();
+                return label.includes('show transcript') || label.includes('transcript') || label.includes('字幕');
             }) || document.querySelector('ytd-video-description-transcript-section-renderer button');
 
         if (transcriptBtn) transcriptBtn.click();
 
-        const selector = 'transcript-segment-view-model .yt-core-attributed-string, yt-formatted-string.ytd-transcript-segment-renderer';
+        // 兼容新版和旧版的字幕选择器
+        // 新版：transcript-segment-view-model .ytAttributedStringHost 或 [role="text"]
+        // 旧版：transcript-segment-view-model .yt-core-attributed-string 或 ytd-transcript-segment-renderer
+        const selector = 'transcript-segment-view-model .ytAttributedStringHost, transcript-segment-view-model [role="text"], transcript-segment-view-model .yt-core-attributed-string, yt-formatted-string.ytd-transcript-segment-renderer';
         const firstSegment = await waitForElement(selector, 5000);
 
-        if (!firstSegment) throw new Error('DOM提取失败: 未能在页面中找到字幕面板，视频可能没有字幕');
+        if (!firstSegment) throw new Error('DOM提取失败: 未能在页面中找到字幕面板，视频可能没有字幕或界面再次改版');
 
         const panel = firstSegment.closest('ytd-engagement-panel-section-list-renderer') || document;
         const segments = panel.querySelectorAll(selector);
@@ -219,7 +228,7 @@
     }
 
     /**
-     * 创建 UI 组件 (将 CSS 打包进 Container，防止被 YouTube 动态清理)
+     * 创建 UI 组件
      */
     function createUI() {
         if (document.getElementById('youtranscript-container')) return;
@@ -227,7 +236,6 @@
         const container = document.createElement('div');
         container.id = 'youtranscript-container';
 
-        // 核心 CSS 直接注入容器内，避免头部注入失败
         const style = document.createElement('style');
         style.textContent = `
             #youtranscript-container {
@@ -313,14 +321,12 @@
         `;
         container.appendChild(style);
 
-        // 复制按钮
         const btn = document.createElement('button');
         btn.id = 'copy-transcript-btn';
         btn.textContent = '📋';
         btn.title = '一键提取视频字幕 (Ctrl+Shift+C)';
         btn.addEventListener('click', handleCopyTranscriptClick);
 
-        // 关闭隐藏按钮
         const closeBtn = document.createElement('div');
         closeBtn.id = 'close-transcript-btn';
         closeBtn.textContent = '×';
@@ -335,7 +341,6 @@
         container.appendChild(btn);
         container.appendChild(closeBtn);
 
-        // Toast 容器
         let toast = document.getElementById('transcript-toast');
         if (!toast) {
             toast = document.createElement('div');
@@ -368,7 +373,6 @@
 
         document.addEventListener('fullscreenchange', updateButtonVisibility);
 
-        // 监听 YouTube 的单页应用导航事件，延迟 500ms 避免被 YouTube 自身的 DOM 刷新覆盖
         window.addEventListener('yt-navigate-finish', () => {
             setTimeout(() => {
                 createUI();
@@ -378,7 +382,7 @@
     }
 
     /**
-     * 入口点：严格等待文档加载就绪
+     * 入口点
      */
     function boot() {
         if (!document.body) {
@@ -390,7 +394,6 @@
         updateButtonVisibility();
     }
 
-    // 启动脚本
     boot();
 
 })();
