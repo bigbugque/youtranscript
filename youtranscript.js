@@ -16,6 +16,14 @@
     let toastTimeout = null;
 
     /**
+     * 判断当前是否为视频播放页（含 /watch 与 /live/VIDEO_ID）
+     */
+    function isVideoPage() {
+        const { pathname } = window.location;
+        return pathname.startsWith('/watch') || pathname.startsWith('/live/');
+    }
+
+    /**
      * 安全地解码 HTML 实体 (绕过 Trusted Types 限制，不使用 innerHTML)
      */
     function decodeEntities(text) {
@@ -50,8 +58,7 @@
         const container = document.getElementById('youtranscript-container');
         if (!container) return;
 
-        const isWatchPage = window.location.href.includes('/watch');
-        if (!isWatchPage || buttonHidden || document.fullscreenElement) {
+        if (!isVideoPage() || buttonHidden || document.fullscreenElement) {
             container.style.display = 'none';
         } else {
             container.style.display = 'flex';
@@ -197,7 +204,7 @@
      * 处理点击复制事件
      */
     async function handleCopyTranscriptClick() {
-        if (!window.location.href.includes('/watch')) {
+        if (!isVideoPage()) {
             showToast('请在视频播放页面使用此功能。');
             return;
         }
@@ -324,18 +331,18 @@
         const btn = document.createElement('button');
         btn.id = 'copy-transcript-btn';
         btn.textContent = '📋';
-        btn.title = '一键提取视频字幕 (Ctrl+Shift+C)';
+        btn.title = '一键提取视频字幕 (Ctrl+Alt+C)';
         btn.addEventListener('click', handleCopyTranscriptClick);
 
         const closeBtn = document.createElement('div');
         closeBtn.id = 'close-transcript-btn';
         closeBtn.textContent = '×';
-        closeBtn.title = '隐藏该按钮 (按 Ctrl+Shift+C 可恢复)';
+        closeBtn.title = '隐藏该按钮 (按 Ctrl+Alt+C 可恢复)';
         closeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             buttonHidden = true;
             updateButtonVisibility();
-            showToast('按钮已隐藏。您可以按快捷键 Ctrl+Shift+C 恢复显示。');
+            showToast('按钮已隐藏。您可以按快捷键 Ctrl+Alt+C 恢复显示。');
         });
 
         container.appendChild(btn);
@@ -359,7 +366,7 @@
         window.__youtranscript_initialized = true;
 
         document.addEventListener('keydown', (event) => {
-            if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
+            if (event.ctrlKey && event.altKey && (event.key === 'C' || event.key === 'c')) {
                 event.preventDefault();
                 if (buttonHidden && !document.fullscreenElement) {
                     buttonHidden = false;
